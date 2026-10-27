@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "lint:md": "markdownlint '**/*.md'",
+    "lint:md:fix": "markdownlint --fix '**/*.md'",
     "prepare": "husky"
   },
   "keywords": [],
@@ -21,6 +23,8 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
-    "husky": "^9.1.7"
+    "husky": "^9.1.7",
+    "markdownlint": "^0.42.0",
+    "markdownlint-cli": "^0.50.0"
   }
 }
