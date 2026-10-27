@@ -26,3 +26,19 @@ bin/
 *.prof
 coverage.out
 c.out
+
+# Node.js dependencies
+node_modules/
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+*.wasm
+
+# Coverage
+coverage/
+
+# Test outputs
+*.test
+*.out
