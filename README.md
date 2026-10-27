@@ -1,4 +1,4 @@
-# golang-review
+# golang-review-skill
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.21%2B-00ADD8.svg?logo=go)](https://go.dev)
@@ -67,19 +67,19 @@ Clone or copy this skill into your local skill directory:
 ```bash
 # User-global installation
 mkdir -p ~/.claude/skills/golang-review
-git clone https://github.com/your-username/golang-review.git ~/.claude/skills/golang-review
+git clone https://github.com/ipanrahman/golang-review-skill.git ~/.claude/skills/golang-review
 ```
 
 ### Option 2: Antigravity / Gemini CLI / Agent Environment
 ```bash
 mkdir -p ~/.agents/skills/golang-review
-git clone https://github.com/your-username/golang-review.git ~/.agents/skills/golang-review
+git clone https://github.com/ipanrahman/golang-review-skill.git ~/.agents/skills/golang-review
 ```
 
 ### Option 3: Project-Local (Cursor / IDE)
 Add the skill to your project repository:
 ```bash
-git submodule add https://github.com/your-username/golang-review.git .agents/skills/golang-review
+git submodule add https://github.com/ipanrahman/golang-review-skill.git .agents/skills/golang-review
 ```
 
 ---
