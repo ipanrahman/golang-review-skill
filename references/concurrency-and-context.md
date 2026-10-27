@@ -164,8 +164,80 @@ for {
 
 ---
 
+## 6. Go 1.23+ Range-Over-Func Iterators (`iter.Seq`, `iter.Seq2`)
+
+### Detection Rules
+
+- **Ignoring `yield` Return Value:** In Go 1.23+, iterators are defined as `func(yield func(V) bool)` or `func(yield func(K, V) bool)`. When consumer terminates a loop early (via `break`, `return`, or `goto`), `yield(...)` returns `false`.
+- **Iterator Leak & Zombie Loops:** If a custom iterator ignores `!yield(...)` and continues iterating, background resource acquisition, channel consumption, or loop execution continues fruitlessly, leaking CPU and goroutines.
+- **Panic on Calling Yield After False:** Yield must never be called again once it returns `false`.
+
+```go
+// ❌ BAD: Generator ignores yield() returning false upon consumer break
+func StreamRecords(db *DB) iter.Seq[Record] {
+    return func(yield func(Record) bool) {
+        rows := db.Query("SELECT ...")
+        defer rows.Close()
+        for rows.Next() {
+            rec := parseRecord(rows)
+            yield(rec) // BUG: If caller 'break's, loop continues to end of table!
+        }
+    }
+}
+
+// ✅ GOOD: Immediately terminate iterator when yield returns false
+func StreamRecords(db *DB) iter.Seq[Record] {
+    return func(yield func(Record) bool) {
+        rows := db.Query("SELECT ...")
+        defer rows.Close()
+        for rows.Next() {
+            rec := parseRecord(rows)
+            if !yield(rec) {
+                return // Exits promptly and invokes defer rows.Close()
+            }
+        }
+    }
+}
+```
+
+---
+
+## 7. Thread-Safe Lazy Initialization (`sync.OnceValues` Go 1.21+)
+
+### Detection Rules
+
+- **Boilerplate Mutex for One-Time Computation:** Using a custom `sync.RWMutex` with a double-checked locking flag or manual `sync.Once` pattern with package variables when initializing resources that yield values or errors.
+- **Idiomatic `sync.OnceValue` / `sync.OnceValues`:** In Go 1.21+, use `sync.OnceValue` (for a single return value) or `sync.OnceValues` (for `(value, error)` returns) to safely encapsulate thread-safe single initialization.
+
+```go
+// ❌ BAD: Verbose manual Once with leaked package variable
+var (
+    cfg     *Config
+    cfgErr  error
+    cfgOnce sync.Once
+)
+func GetConfig() (*Config, error) {
+    cfgOnce.Do(func() {
+        cfg, cfgErr = loadConfig()
+    })
+    return cfg, cfgErr
+}
+
+// ✅ GOOD (Go 1.21+): Clean encapsulation with sync.OnceValues
+var loadConfigOnce = sync.OnceValues(func() (*Config, error) {
+    return loadConfig()
+})
+
+func GetConfig() (*Config, error) {
+    return loadConfigOnce()
+}
+```
+
+---
+
 ## False Positive Prevention Checklist
 
 - [ ] Do NOT flag `go func() { ... }` as a leak if it has a bounded, deterministic completion path (e.g., standard WaitGroup synchronization).
 - [ ] Do NOT flag loop variable captures if `go.mod` specifies Go version `1.22` or newer.
+- [ ] Do NOT flag `time.NewTicker` or `time.NewTimer` without `Stop()` as permanent uncollected leaks if `go.mod` specifies Go version `1.23` or newer (Go 1.23 GC automatically collects unreferenced timers), though calling `Stop()` remains best practice.
 - [ ] Do NOT flag lock-free patterns if atomic primitives (`sync/atomic`) are properly applied.

@@ -30,7 +30,7 @@ metadata:
 | ID | Severity | Confidence | Location | Title |
 | :--- | :---: | :---: | :--- | :--- |
 | **GR-SEC-001** | P0 | High | `internal/repo/user.go:58` | SQL Injection via string formatting |
-| **GR-CONC-001**| P1 | High | `pkg/worker/fetcher.go:112` | Goroutine leak on unbuffered channel |
+| **GR-CONC-001** | P1 | High | `pkg/worker/fetcher.go:112` | Goroutine leak on unbuffered channel |
 
 *(If no issues are identified, state: "No actionable findings identified within the reviewed scope.")*
 
@@ -53,6 +53,7 @@ Real-world production consequence (e.g. panic, memory leak, security compromise,
 
 **Recommendation:**
 Idiomatic Go code or architectural modification to resolve the issue:
+
 ```go
 // Proposed fix
 ```

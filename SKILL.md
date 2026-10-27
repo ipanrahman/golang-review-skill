@@ -38,15 +38,27 @@ Review Go code systematically with correctness, concurrency safety, security, re
 
 Load **only** the reference file corresponding to the categories present in the diff to conserve context:
 
-| Category | Topics Covered | Reference File |
-| :--- | :--- | :--- |
-| **Correctness & Errors** | `errors.Is/As/Join`, typed nil vs interface nil, slice aliasing, loop scopes | [`references/correctness-and-error-handling.md`](references/correctness-and-error-handling.md) |
-| **Concurrency & Context** | Goroutine leaks, mutex copy-by-value, channel deadlocks, context propagation | [`references/concurrency-and-context.md`](references/concurrency-and-context.md) |
-| **Security** | SQL injection, shell command execution, path traversal, SSRF, `crypto/rand` | [`references/security.md`](references/security.md) |
-| **Performance & Resources** | HTTP `Body.Close()`, `sql.Rows` leaks, `defer` in loops, slice memory retention | [`references/performance-and-resource-management.md`](references/performance-and-resource-management.md) |
-| **Architecture** | Package cyclic dependencies, interface pollution, global state, API contracts | [`references/architecture-and-maintainability.md`](references/architecture-and-maintainability.md) |
-| **Testing** | Table-driven tests, `t.Parallel()` capture, flaky timer sleeps, `-race` execution | [`references/testing-and-quality.md`](references/testing-and-quality.md) |
-| **Dependencies & Tooling** | `go.mod` directives, CVE audits (`govulncheck`), replace directives, build tags | [`references/dependencies-and-tooling.md`](references/dependencies-and-tooling.md) |
+| Category | Topics Covered | Reference File | Version Gates |
+| :--- | :--- | :--- | :--- |
+| **Correctness & Errors** | `errors.Is/As/Join`, typed nil vs interface nil, slice aliasing, loop scopes | [`references/correctness-and-error-handling.md`](references/correctness-and-error-handling.md) | Loop scope: Go < 1.22 |
+| **Concurrency & Context** | Goroutine leaks, mutex copy-by-value, channel deadlocks, context propagation, **Go 1.23+ iterators (`iter.Seq`) yield handling**, `sync.OnceValue` | [`references/concurrency-and-context.md`](references/concurrency-and-context.md) | Iterators: Go >= 1.23; Timer GC: Go >= 1.23 |
+| **Security** | SQL injection, shell command execution, **path traversal (Go 1.24 `os.Root`)**, SSRF, `crypto/rand` | [`references/security.md`](references/security.md) | `os.Root`: Go >= 1.24 |
+| **Performance & Resources** | HTTP `Body.Close()`, `sql.Rows` leaks, `defer` in loops, slice memory retention, **HTTP timeouts (Slowloris)**, **struct field alignment** | [`references/performance-and-resource-management.md`](references/performance-and-resource-management.md) | Struct align: 64-bit only |
+| **Architecture** | Package cyclic dependencies, interface pollution, global state, API contracts | [`references/architecture-and-maintainability.md`](references/architecture-and-maintainability.md) | — |
+| **Testing** | Table-driven tests, `t.Parallel()` capture, flaky timer sleeps, `-race` execution | [`references/testing-and-quality.md`](references/testing-and-quality.md) | `t.Parallel()` scope: Go < 1.22 |
+| **Dependencies & Tooling** | `go.mod` directives, CVE audits (`govulncheck`), replace directives, build tags | [`references/dependencies-and-tooling.md`](references/dependencies-and-tooling.md) | — |
+
+## Version-Aware Review Rules
+
+When reviewing, always read `go.mod` first to determine the Go version directive. Apply these version gates:
+
+- **Go < 1.22**: Flag loop variable capture in goroutines and `t.Parallel()` subtests.
+- **Go >= 1.22**: Loop variables have per-iteration scope; do NOT flag captures.
+- **Go >= 1.23**:
+  - Iterators (`iter.Seq`, `iter.Seq2`) must check `yield` return value.
+  - Unreferenced `time.Timer`/`time.Ticker` are GC-collected; `Stop()` is best practice but not required for leak prevention.
+- **Go >= 1.24**: Prefer `os.OpenRoot` for filesystem sandboxing over lexical `filepath.Clean`/`Rel` checks.
+- **64-bit architectures**: Flag suboptimal struct field ordering causing excessive padding (8-byte word alignment).
 
 ## Review Workflow
 

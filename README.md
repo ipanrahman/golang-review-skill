@@ -15,6 +15,7 @@
 ## ⚡ Why `golang-review`?
 
 When building Go applications—especially when **vibe coding** with AI assistants—models frequently generate code that compiles but harbors subtle runtime disasters:
+
 - **The "Typed Nil" Trap:** Returning a typed nil pointer as an `error` interface (`err != nil` always evaluates to `true`).
 - **Goroutine Leaks:** Writing to unbuffered channels during timeout or early return.
 - **Nil Dereference on Defer:** Calling `defer resp.Body.Close()` before checking `if err != nil`.
@@ -63,7 +64,9 @@ When building Go applications—especially when **vibe coding** with AI assistan
 ## 📦 Installation & Setup
 
 ### Option 1: Claude Code / OpenClaw
+
 Clone or copy this skill into your local skill directory:
+
 ```bash
 # User-global installation
 mkdir -p ~/.claude/skills/golang-review
@@ -71,13 +74,16 @@ git clone https://github.com/ipanrahman/golang-review-skill.git ~/.claude/skills
 ```
 
 ### Option 2: Antigravity / Gemini CLI / Agent Environment
+
 ```bash
 mkdir -p ~/.agents/skills/golang-review
 git clone https://github.com/ipanrahman/golang-review-skill.git ~/.agents/skills/golang-review
 ```
 
 ### Option 3: Project-Local (Cursor / IDE)
+
 Add the skill to your project repository:
+
 ```bash
 git submodule add https://github.com/ipanrahman/golang-review-skill.git .agents/skills/golang-review
 ```
@@ -115,6 +121,7 @@ Allocate a buffered channel of size 1:
 ch := make(chan Result, 1)
 go func() { ch <- doWork() }()
 ```
+
 ```
 
 ---

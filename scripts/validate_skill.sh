@@ -49,6 +49,7 @@ REQUIRED_FILES=(
     "CONTRIBUTING.md"
     ".gitignore"
     "scripts/README.md"
+    "scripts/review_diff.sh"
     "templates/finding-examples.md"
     "templates/review-report.md"
     "references/concurrency-and-context.md"

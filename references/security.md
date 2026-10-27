@@ -42,24 +42,39 @@ cmd := exec.Command("ping", "-c", "1", hostInput)
 
 ---
 
-## 2. Path Traversal
+## 2. Path Traversal & Filesystem Containment
 
 ### Detection Rules
 
 - **Flawed Assumption with `filepath.Clean`:** `filepath.Clean` alone does **NOT** prevent escaping outside a base directory. `filepath.Clean("../../etc/passwd")` returns `../../etc/passwd`.
-- **Safe Directory Containment:** After joining base directory and user input, ensure the canonicalized path starts with the base directory prefix.
+- **Safe Directory Containment (Go < 1.24):** After joining base directory and user input, ensure the canonicalized path starts with the base directory prefix using `filepath.Rel`. However, note that lexical checks can still be vulnerable to Time-Of-Check to Time-Of-Use (TOCTOU) symlink swaps.
+- **Kernel-Level Sandboxing with `os.Root` (Go 1.24+):** Go 1.24 introduces `os.OpenRoot(baseDir)`. All operations executed on `*os.Root` (`root.Open`, `root.Create`, etc.) are constrained at the operating system file descriptor level (e.g. `openat2` / `O_RESOLVE_BENEATH`), guaranteeing symlinks and path separators cannot escape the root boundary.
 
 ```go
 // ❌ BAD: User input can escape the target root directory
 cleanPath := filepath.Clean(userInput)
 target := filepath.Join(baseDir, cleanPath) // target can resolve to /etc/passwd
 
-// ✅ GOOD: Strict prefix verification ensures path stays inside baseDir
+// ✅ ACCEPTABLE in Go < 1.24: Lexical prefix verification with filepath.Rel
 target := filepath.Join(baseDir, filepath.Clean("/"+userInput))
 rel, err := filepath.Rel(baseDir, target)
 if err != nil || strings.HasPrefix(rel, "..") {
     return fmt.Errorf("invalid path traversal attempt")
 }
+
+// ✅ BEST in Go 1.24+: OS-enforced directory containment via os.Root
+root, err := os.OpenRoot(baseDir)
+if err != nil {
+    return err
+}
+defer root.Close()
+
+// Operating system guarantees untrustedInput cannot traverse outside root
+f, err := root.Open(untrustedInput)
+if err != nil {
+    return err
+}
+defer f.Close()
 ```
 
 ---

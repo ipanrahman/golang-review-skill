@@ -1,0 +1,102 @@
+---
+description: "Golang code review rules for Cursor IDE. Applies to all Go code reviews, PRs, and diffs."
+globs: ["*.go", "go.mod", "go.sum"]
+alwaysApply: false
+---
+
+# Golang Code Review Rules
+
+When reviewing Go code, apply these rules systematically. Load the relevant reference file from `.agents/skills/golang-review/references/` based on the category of code being reviewed.
+
+## Version-Aware Rules (Read go.mod First)
+
+- **Go < 1.22**: Flag loop variable capture in goroutines and `t.Parallel()` subtests.
+- **Go >= 1.22**: Loop variables have per-iteration scope; do NOT flag captures.
+- **Go >= 1.23**: 
+  - Iterators (`iter.Seq`, `iter.Seq2`) MUST check `yield` return value: `if !yield(v) { return }`
+  - Unreferenced `time.Timer`/`time.Ticker` are GC-collected; `Stop()` is best practice but not required for leak prevention.
+- **Go >= 1.24**: Prefer `os.OpenRoot` for filesystem sandboxing over lexical `filepath.Clean`/`Rel` checks.
+- **64-bit**: Flag suboptimal struct field ordering causing excessive padding (8-byte word alignment).
+
+## Critical Patterns to Flag (P0/P1)
+
+### Concurrency
+- [ ] Unbuffered channel send without context cancellation handling
+- [ ] Missing `defer cancel()` for `context.WithTimeout`/`WithCancel`
+- [ ] `sync.Mutex` passed by value or used with value receiver
+- [ ] `time.Ticker` without `defer Stop()`
+- [ ] Iterator ignoring `yield` return value (Go 1.23+)
+
+### Security
+- [ ] SQL queries via `fmt.Sprintf`/string concat instead of parameterized queries
+- [ ] `exec.Command("sh", "-c", userInput)` shell invocation
+- [ ] Path traversal: `filepath.Clean` without `os.Root` (Go 1.24+) or `filepath.Rel` prefix check
+- [ ] SSRF: `http.Get(userURL)` without internal IP blocking
+- [ ] `math/rand` for tokens/secrets instead of `crypto/rand`
+- [ ] `tls.Config{InsecureSkipVerify: true}` in production code
+- [ ] Logging sensitive fields (password, token, secret) in slog
+
+### Resource Management
+- [ ] `defer resp.Body.Close()` before `if err != nil` check (nil panic)
+- [ ] `defer f.Close()` in loop without helper function
+- [ ] `db.BeginTx()` without `defer tx.Rollback()`
+- [ ] `sql.Rows` without `defer rows.Close()` and `rows.Err()` check
+- [ ] HTTP server without `ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, `IdleTimeout`
+- [ ] Sub-slice retaining massive backing array (use `copy()`)
+
+### Performance
+- [ ] Struct fields not ordered by size (8→4→2→1 byte) in high-volume types
+- [ ] String concatenation in loop (`s += x`) instead of `strings.Builder`
+- [ ] Missing `errors.Is/As/Join` for error inspection
+- [ ] Custom loops instead of `slices`/`maps` helpers (Go 1.21+)
+
+## Evidence-Based Finding Format
+
+Every finding MUST follow this structure:
+
+```markdown
+[P0|P1|P2|P3] [High|Medium|Low] GR-CAT-XXX: Concise Title
+
+File: path/to/file.go:lines
+
+Evidence:
+Concrete code snippet and why it violates Go runtime guarantees.
+
+Trigger:
+The runtime condition, user input, or caller behavior that triggers the issue.
+
+Impact:
+Concrete production effect (goroutine leak, deadlock, data race, silent failure).
+
+Recommendation:
+Exact code correction or idiomatic Go refactoring.
+```
+
+## Tooling (Non-Destructive Only)
+
+Run these for deterministic evidence:
+```bash
+gofmt -l -d .
+go vet ./...
+go test -race -short ./...
+golangci-lint run --fast  # if .golangci.yml exists
+```
+
+NEVER run: `go mod tidy`, `gofmt -w`, `go get`, or any mutating commands.
+
+## Reference Files
+
+| Category | Reference |
+|---|---|
+| Correctness & Errors | `references/correctness-and-error-handling.md` |
+| Concurrency & Context | `references/concurrency-and-context.md` |
+| Security | `references/security.md` |
+| Performance & Resources | `references/performance-and-resource-management.md` |
+| Architecture | `references/architecture-and-maintainability.md` |
+| Testing | `references/testing-and-quality.md` |
+| Dependencies & Tooling | `references/dependencies-and-tooling.md` |
+
+Run the harvester script for automated diff analysis:
+```bash
+.agents/skills/golang-review/scripts/review_diff.sh [HEAD|branch]
+```

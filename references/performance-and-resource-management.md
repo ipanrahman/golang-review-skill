@@ -79,38 +79,37 @@ func processOne(p string) error {
 
 ---
 
-## 3. Database Resource Lifecycles
+## 3. Database Resource Lifecycles & Transaction Cleanup
 
 ### Detection Rules
 
 - **Unclosed `sql.Rows`:** Calling `db.Query` or `db.QueryContext` without deferring `rows.Close()` leaks database connection pool slots.
 - **Missing `rows.Err()` Check:** After `for rows.Next()`, always verify `if err := rows.Err(); err != nil` to catch network disconnections or driver errors mid-iteration.
+- **Missing `defer tx.Rollback()` (Connection Pool Starvation):** In Go, `db.BeginTx()` reserves a dedicated connection from the pool. If any error or panic occurs before `tx.Commit()`, the connection is leaked indefinitely unless `tx.Rollback()` is called.
+- **Safe Double-Rollback Idiom:** Deferring `tx.Rollback()` immediately after `BeginTx` is idiomatic. If `tx.Commit()` succeeds, the deferred `Rollback()` is an internal no-op returning `sql.ErrTxDone`.
 
 ```go
-// ❌ BAD: Connection pool slot leaks on early return; errors mid-scan missed
-rows, err := db.QueryContext(ctx, "SELECT id FROM items")
+// ❌ BAD: Connection leaks if doWork() returns an error before Commit
+tx, err := db.BeginTx(ctx, nil)
 if err != nil {
     return err
 }
-for rows.Next() {
-    // missing defer rows.Close()!
+if err := doWork(ctx, tx); err != nil {
+    return err // Connection slot remains locked in pool!
 }
+return tx.Commit()
 
-// ✅ GOOD: Guaranteed cleanup and error verification
-rows, err := db.QueryContext(ctx, "SELECT id FROM items")
+// ✅ GOOD: Guaranteed rollback on failure, safe no-op on success
+tx, err := db.BeginTx(ctx, nil)
 if err != nil {
     return err
 }
-defer rows.Close()
+defer tx.Rollback() // Safe: no-op if tx.Commit() succeeded!
 
-for rows.Next() {
-    if err := rows.Scan(&id); err != nil {
-        return err
-    }
+if err := doWork(ctx, tx); err != nil {
+    return err // Rollback automatically triggered
 }
-if err := rows.Err(); err != nil {
-    return err
-}
+return tx.Commit()
 ```
 
 ---
@@ -147,8 +146,67 @@ func GetPrefix(hugeData []byte) []byte {
 
 ---
 
+## 6. HTTP Server Production Timeouts (Slowloris Mitigation)
+
+### Detection Rules
+
+- **Unbounded Default HTTP Server:** Using `http.ListenAndServe(":8080", handler)` or `&http.Server{}` without setting timeouts leaves the server vulnerable to Slowloris DoS attacks and connection leaks.
+- **Critical Timeouts:**
+  - `ReadHeaderTimeout`: Prevents clients from sending HTTP request headers indefinitely slowly.
+  - `ReadTimeout`: Caps reading the entire request body.
+  - `WriteTimeout`: Caps writing the response.
+  - `IdleTimeout`: Caps keep-alive connection reuse idle duration.
+
+```go
+// ❌ BAD: No timeouts set; vulnerable to connection exhaustion (Slowloris)
+srv := &http.Server{
+    Addr:    ":8080",
+    Handler: router,
+}
+log.Fatal(srv.ListenAndServe())
+
+// ✅ GOOD: Explicit production timeouts configured
+srv := &http.Server{
+    Addr:              ":8080",
+    Handler:           router,
+    ReadHeaderTimeout: 5 * time.Second,  // Essential protection
+    ReadTimeout:       15 * time.Second,
+    WriteTimeout:      30 * time.Second,
+    IdleTimeout:       60 * time.Second,
+}
+log.Fatal(srv.ListenAndServe())
+```
+
+---
+
+## 7. Struct Field Alignment & Memory Padding (64-Bit Architecture)
+
+### Detection Rules
+
+- In 64-bit architectures, Go structures align fields to 8-byte word boundaries. Suboptimal field ordering introduces internal padding bytes.
+- When structs are instantiated in high volume (e.g. caches, metrics, or slices of millions of records), sorting fields by descending size (8-byte, 4-byte, 2-byte, 1-byte) reduces total memory usage and improves CPU cache locality.
+
+```go
+// ❌ SUBOPTIMAL: Inefficient alignment (Total: 24 bytes due to internal padding)
+type MetricPoint struct {
+    FlagA     bool      // 1 byte + 7 bytes padding
+    Timestamp int64     // 8 bytes
+    FlagB     bool      // 1 byte + 7 bytes padding
+}
+
+// ✅ OPTIMIZED: Grouped by word size (Total: 16 bytes - 33% memory reduction)
+type MetricPoint struct {
+    Timestamp int64     // 8 bytes
+    FlagA     bool      // 1 byte
+    FlagB     bool      // 1 byte + 6 bytes trailing padding
+}
+```
+
+---
+
 ## False Positive Prevention Checklist
 
+- [ ] Do NOT demand struct re-ordering for non-critical, rarely-instantiated types (only flag when types are clearly used in massive arrays or high-throughput caches).
 - [ ] Do NOT demand `sync.Pool` usage without benchmark evidence showing high GC pause times or heap allocation pressure.
 - [ ] Do NOT flag `defer` in loops if the loop is statically bounded to a tiny fixed count (e.g., 2 or 3 attempts).
 - [ ] Do NOT claim a performance regression unless an algorithmic complexity increase or excessive allocation path can be proven.

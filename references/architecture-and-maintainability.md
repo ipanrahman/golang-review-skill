@@ -87,7 +87,8 @@ func New(client *http.Client) *Service {
 
 ## 5. Effective Go Naming & Idioms
 
-### Detection Rules:
+### Detection Rules
+
 - **Package Name Stuttering (Effective Go § Package names):** Exported symbols must not repeat the package name. Write `http.Client` (not `http.HttpClient`), `ring.New` (not `ring.NewRing`), and `json.Encoder` (not `json.JSONEncoder`).
 - **Getter/Setter Conventions (Effective Go § Getters):** Go does not use `Get` in getter methods. Use `user.Owner()` instead of `user.GetOwner()`. Setter remains `user.SetOwner(...)`.
 - **Interface Naming Conventions (Effective Go § Interface names):** One-method interfaces must be named with an `-er` suffix or agent noun (`Reader`, `Writer`, `Closer`, `Formatter`, `Scanner`).

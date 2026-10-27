@@ -133,7 +133,8 @@ func Save(filename string, data []byte) (err error) {
 
 ## 6. Control Flow & Guard Clauses (Effective Go § If)
 
-### Detection Rules:
+### Detection Rules
+
 - **Eliminating Unnecessary Else:** If the `if` branch ends in a `return`, `break`, `continue`, or `panic`, omit the `else` block. Keep the happy path aligned to the left margin ("line of sight" coding).
 - **Multiple Error Cascades:** Avoid deep nesting of `else if` for error checking. Handle and return errors early.
 
@@ -171,9 +172,55 @@ func ReadConfig(path string) (*Config, error) {
 
 ## 7. Errors as Values vs Panic (Effective Go § Panic)
 
-### Detection Rules:
+### Detection Rules
+
 - **No Panic for Normal Failures:** Never use `panic` for routine errors (such as file not found, bad network connection, or invalid user input). Functions must return `(Result, error)`.
 - **Panic Boundary:** `panic` is reserved strictly for unrecoverable programmer errors or package initialization failures (`MustCompile`).
+
+---
+
+## 8. Structured Logging Hygiene (`log/slog` Go 1.21+)
+
+### Detection Rules
+
+- **Odd Key-Value Argument Count:** `slog` methods (`slog.Info`, `slog.Error`) accept variadic `...any` key-value pairs. Passing an odd number of arguments causes `slog` to synthesize an unintended `!BADKEY` attribute in log outputs.
+- **Sensitive Data Exposure:** Never log unsanitized tokens, authorization headers, passwords, or PII into structured logs.
+- **Performance in Hot Loops:** In performance-sensitive code, prefer strongly typed `slog.Attr` (`slog.String("k", v)`, `slog.Int("k", v)`) with `LogAttrs` over loose key-value pairs (`slog.Any`) to avoid heap boxing.
+
+```go
+// ❌ BAD: Odd argument count creates "!BADKEY" attribute; logs raw credential
+slog.Info("user login attempt", "user", username, "auth_header", authHeader, "attempt") // attempt has no value!
+
+// ✅ GOOD: Balanced attributes and sanitized sensitive data
+slog.Info("user login attempt",
+    "user", username,
+    "auth_present", authHeader != "",
+    "attempt_count", 1,
+)
+```
+
+---
+
+## 9. Idiomatic Standard Library Helpers (`slices` & `maps` Go 1.21+)
+
+### Detection Rules
+
+- **Reinventing Standard Helpers:** Writing custom loops for element searching, deletion, or map cloning instead of using the standard generic packages `slices` and `maps`.
+- **Slice Mutation Safety:** Using `slices.Delete` or `slices.Compact` modifies the slice in-place but returns a new shortened slice. Callers must assign the result back: `s = slices.Delete(s, i, j)`.
+
+```go
+// ❌ BAD: Custom boilerplate loop prone to off-by-one or slice aliasing
+found := false
+for _, v := range items {
+    if v == target {
+        found = true
+        break
+    }
+}
+
+// ✅ GOOD (Go 1.21+): Concise and optimized stdlib helper
+found := slices.Contains(items, target)
+```
 
 ---
 
@@ -182,3 +229,4 @@ func ReadConfig(path string) (*Config, error) {
 - [ ] Do NOT require `errors.Wrap` / `%w` if the function boundary intentionally encapsulates external error details as an internal implementation detail.
 - [ ] Do NOT flag `defer resp.Body.Close()` without error checking on read streams unless the stream requires transactional confirmation.
 - [ ] Do NOT flag simple struct copying unless the struct contains mutexes, large arrays, or pointer invariants.
+- [ ] Do NOT flag `log/slog` string attributes if the call site is not on a proven performance-critical hot path.

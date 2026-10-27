@@ -34,6 +34,7 @@ Replace string formatting with parameterized positional placeholders:
 query := "SELECT id, email, role FROM users WHERE org_id = $1 AND status = 'active'"
 rows, err := r.db.QueryContext(ctx, query, orgID)
 ```
+
 ```
 
 ---
@@ -62,6 +63,7 @@ go func() {
     resCh <- doWork()
 }()
 ```
+
 ```
 
 ---
@@ -92,6 +94,7 @@ func ValidateOrder(o *Order) error {
     return nil // Return untyped nil interface
 }
 ```
+
 ```
 
 ---
@@ -121,6 +124,7 @@ for _, path := range filePaths {
     }
 }
 ```
+
 ```
 
 ---
